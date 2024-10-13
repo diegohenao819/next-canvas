@@ -1,20 +1,20 @@
-import axios from "axios";
-import { NextResponse } from "next/server";
+"use server"; // Esto asegura que la acción solo se ejecuta en el servidor
 
-export async function POST(request: Request) {
-  const { apiToken, courseId, quizTitle, questions } = await request.json();
+export async function Post(formData: FormData): Promise<void> {
+  const apiToken = formData.get("apiToken");
+  const courseId = formData.get("courseId");
+  const quizTitle = formData.get("quizTitle");
+  const questions = formData.get("questions");
 
   if (!apiToken || !courseId || !quizTitle || !questions) {
-    return NextResponse.json(
-      { error: "Missing required data" },
-      { status: 400 }
-    );
+    console.error("Missing required data");
+    return;
   }
 
   const canvasBaseUrl = "https://canvas.instructure.com/api/v1";
 
   try {
-    // Step 1: Create the quiz in Canvas
+    // Paso 1: Crear el quiz en Canvas usando fetch
     const quizData = {
       quiz: {
         title: quizTitle,
@@ -24,43 +24,49 @@ export async function POST(request: Request) {
       },
     };
 
-    const quizResponse = await axios.post(
+    const quizResponse = await fetch(
       `${canvasBaseUrl}/courses/${courseId}/quizzes`,
-      quizData,
       {
+        method: 'POST',
         headers: {
           Authorization: `Bearer ${apiToken}`,
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify(quizData),
       }
     );
 
-    const quizId = quizResponse.data.id;
-    console.log("Quiz created successfully with ID:", quizId);
-
-    // Step 2: Add the questions to the created quiz
-    for (const question of questions) {
-      await axios.post(
-        `${canvasBaseUrl}/courses/${courseId}/quizzes/${quizId}/questions`,
-        { question },
-        {
-          headers: {
-            Authorization: `Bearer ${apiToken}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-      console.log("Question added:", question.question_name);
+    if (!quizResponse.ok) {
+      throw new Error('Error creating quiz');
     }
 
-    return NextResponse.json({ message: "Quiz created successfully", quizId });
+    const quizResult = await quizResponse.json();
+    const quizId = quizResult.id;
+    console.log("Quiz created successfully with ID:", quizId);
+
+    // Paso 2: Agregar las preguntas al quiz creado usando fetch
+    const parsedQuestions = JSON.parse(questions as string);
+
+    for (const question of parsedQuestions) {
+      const questionResponse = await fetch(
+        `${canvasBaseUrl}/courses/${courseId}/quizzes/${quizId}/questions`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${apiToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ question }),
+        }
+      );
+
+      if (!questionResponse.ok) {
+        throw new Error('Error adding question');
+      }
+
+      console.log("Question added:", question.question_name);
+    }
   } catch (error) {
     console.error("Error creating quiz:", error);
-    return NextResponse.json(
-      {
-        error: "Error creating quiz",
-      },
-      { status: 500 }
-    );
   }
 }
