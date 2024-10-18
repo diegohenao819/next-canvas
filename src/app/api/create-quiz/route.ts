@@ -18,9 +18,9 @@ export async function Post(formData: FormData): Promise<void> {
     const quizData = {
       quiz: {
         title: quizTitle,
-        description: "This quiz was created automatically.",
-        published: true,
-        allowed_attempts: 1,
+        description: quizTitle,
+        published: false,
+        allowed_attempts: 10,
       },
     };
 
