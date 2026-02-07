@@ -1,6 +1,6 @@
 "use server"; // Esto asegura que la acción solo se ejecuta en el servidor
 
-export async function Post(formData: FormData): Promise<void> {
+export async function POST(formData: FormData): Promise<void> {
   const apiToken = formData.get("apiToken");
   const courseId = formData.get("courseId");
   const quizTitle = formData.get("quizTitle");
