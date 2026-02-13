@@ -1,4 +1,4 @@
-"use server"; // Esto asegura que la acción solo se ejecuta en el servidor
+"use server";
 
 export type QuizActionResult = {
   success: boolean;
@@ -7,7 +7,9 @@ export type QuizActionResult = {
   error?: string;
 };
 
-export async function Post(formData: FormData): Promise<QuizActionResult> {
+export async function createQuiz(
+  formData: FormData,
+): Promise<QuizActionResult> {
   const apiToken = formData.get("apiToken");
   const courseId = formData.get("courseId");
   const quizTitle = formData.get("quizTitle");
@@ -35,7 +37,7 @@ export async function Post(formData: FormData): Promise<QuizActionResult> {
           error: "INVALID_QUESTIONS_FORMAT",
         };
       }
-    } catch (parseError) {
+    } catch {
       return {
         success: false,
         message:
