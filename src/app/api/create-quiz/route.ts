@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 "use server"; // Esto asegura que la acción solo se ejecuta en el servidor
 
 export type QuizActionResult = {
@@ -23,13 +23,13 @@ export async function Post(formData: FormData): Promise<QuizActionResult> {
   }
 
   const canvasBaseUrl = "https://canvas.instructure.com/api/v1";
-=======
+
 import { NextResponse } from "next/server";
->>>>>>> 89457dbc8653ba8a2b2fe86eea3bb7bb12a88e3d
+
 
 export async function POST(req: Request) {
   try {
-<<<<<<< HEAD
+
     // Validar y parsear las preguntas antes de hacer las llamadas a la API
     let parsedQuestions;
     try {
@@ -51,7 +51,7 @@ export async function POST(req: Request) {
     }
 
     // Paso 1: Crear el quiz en Canvas usando fetch
-=======
+
     const { apiToken, courseId, quizTitle, questions } = await req.json();
 
     if (!apiToken || !courseId || !quizTitle || !questions) {
@@ -64,7 +64,7 @@ export async function POST(req: Request) {
     const canvasBaseUrl = "https://canvas.instructure.com/api/v1";
 
     // 1) Create quiz
->>>>>>> 89457dbc8653ba8a2b2fe86eea3bb7bb12a88e3d
+
     const quizData = {
       quiz: {
         title: quizTitle,
@@ -80,70 +80,70 @@ export async function POST(req: Request) {
         method: "POST",
         headers: {
           Authorization: `Bearer ${apiToken}`,
-<<<<<<< HEAD
+
           "Content-Type": "application/json",
         },
         body: JSON.stringify(quizData),
       },
-=======
+
           "Content-Type": "application/json"
         },
         body: JSON.stringify(quizData)
       }
->>>>>>> 89457dbc8653ba8a2b2fe86eea3bb7bb12a88e3d
+
     );
 
     const quizText = await quizResponse.text();
     if (!quizResponse.ok) {
-<<<<<<< HEAD
+
       const errorText = await quizResponse.text();
       return {
         success: false,
         message: `Failed to create quiz. Status: ${quizResponse.status}. ${errorText}`,
         error: "QUIZ_CREATION_FAILED",
       };
-=======
+
       return NextResponse.json(
         { ok: false, error: "Error creating quiz", details: quizText },
         { status: quizResponse.status }
       );
->>>>>>> 89457dbc8653ba8a2b2fe86eea3bb7bb12a88e3d
+
     }
 
     const quizResult = JSON.parse(quizText);
     const quizId = quizResult.id;
 
-<<<<<<< HEAD
+
     // Paso 2: Agregar las preguntas al quiz creado usando fetch
     let questionsAdded = 0;
     for (const question of parsedQuestions) {
-=======
+
     // 2) Add questions
     const parsedQuestions = Array.isArray(questions) ? questions : questions; // expect array
     for (const q of parsedQuestions) {
->>>>>>> 89457dbc8653ba8a2b2fe86eea3bb7bb12a88e3d
+
       const questionResponse = await fetch(
         `${canvasBaseUrl}/courses/${courseId}/quizzes/${quizId}/questions`,
         {
           method: "POST",
           headers: {
             Authorization: `Bearer ${apiToken}`,
-<<<<<<< HEAD
+
             "Content-Type": "application/json",
           },
           body: JSON.stringify({ question }),
         },
-=======
+
             "Content-Type": "application/json"
           },
           body: JSON.stringify({ question: q })
         }
->>>>>>> 89457dbc8653ba8a2b2fe86eea3bb7bb12a88e3d
+
       );
 
       const qText = await questionResponse.text();
       if (!questionResponse.ok) {
-<<<<<<< HEAD
+
         const errorText = await questionResponse.text();
         return {
           success: false,
@@ -169,7 +169,7 @@ export async function POST(req: Request) {
       message: `An unexpected error occurred: ${error instanceof Error ? error.message : "Unknown error"}`,
       error: "UNEXPECTED_ERROR",
     };
-=======
+
         return NextResponse.json(
           {
             ok: false,
@@ -188,7 +188,7 @@ export async function POST(req: Request) {
       { ok: false, error: err?.message ?? "Server error" },
       { status: 500 }
     );
->>>>>>> 89457dbc8653ba8a2b2fe86eea3bb7bb12a88e3d
+
   }
 }
 
