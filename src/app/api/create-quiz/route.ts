@@ -1,198 +1,177 @@
-<<<<<<< HEAD
-"use server"; // Esto asegura que la acción solo se ejecuta en el servidor
+import { NextResponse } from "next/server";
 
-export type QuizActionResult = {
+type QuizActionResult = {
   success: boolean;
   message: string;
   quizId?: number;
   error?: string;
 };
 
-export async function Post(formData: FormData): Promise<QuizActionResult> {
-  const apiToken = formData.get("apiToken");
-  const courseId = formData.get("courseId");
-  const quizTitle = formData.get("quizTitle");
-  const questions = formData.get("questions");
+type CanvasQuestion = {
+  question_name?: string;
+  question_text?: string;
+  question_type?: string;
+  points_possible?: number;
+  answers?: unknown[];
+  [key: string]: unknown;
+};
 
-  if (!apiToken || !courseId || !quizTitle || !questions) {
-    return {
-      success: false,
-      message: "Missing required fields. Please fill in all fields.",
-      error: "MISSING_FIELDS",
-    };
-  }
-
-  const canvasBaseUrl = "https://canvas.instructure.com/api/v1";
-=======
-import { NextResponse } from "next/server";
->>>>>>> 89457dbc8653ba8a2b2fe86eea3bb7bb12a88e3d
+const CANVAS_BASE_URL = "https://canvas.instructure.com/api/v1";
 
 export async function POST(req: Request) {
   try {
-<<<<<<< HEAD
-    // Validar y parsear las preguntas antes de hacer las llamadas a la API
-    let parsedQuestions;
-    try {
-      parsedQuestions = JSON.parse(questions as string);
-      if (!Array.isArray(parsedQuestions) || parsedQuestions.length === 0) {
-        return {
-          success: false,
-          message: "Questions must be a non-empty array in JSON format.",
-          error: "INVALID_QUESTIONS_FORMAT",
-        };
-      }
-    } catch (parseError) {
-      return {
-        success: false,
-        message:
-          "Invalid JSON format for questions. Please check your JSON syntax.",
-        error: "JSON_PARSE_ERROR",
-      };
-    }
+    const body = await req.json();
 
-    // Paso 1: Crear el quiz en Canvas usando fetch
-=======
-    const { apiToken, courseId, quizTitle, questions } = await req.json();
+    const apiToken = body?.apiToken;
+    const courseId = body?.courseId;
+    const quizTitle = body?.quizTitle;
+    const questions = body?.questions;
 
     if (!apiToken || !courseId || !quizTitle || !questions) {
       return NextResponse.json(
-        { ok: false, error: "Missing required data" },
-        { status: 400 }
+        {
+          success: false,
+          message: "Missing required fields. Please fill in all fields.",
+          error: "MISSING_FIELDS",
+        } satisfies QuizActionResult,
+        { status: 400 },
       );
     }
 
-    const canvasBaseUrl = "https://canvas.instructure.com/api/v1";
+    // questions can be either an array or a JSON string
+    let parsedQuestions: CanvasQuestion[] = [];
+    try {
+      parsedQuestions =
+        typeof questions === "string" ? JSON.parse(questions) : questions;
+
+      if (!Array.isArray(parsedQuestions) || parsedQuestions.length === 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Questions must be a non-empty array in JSON format.",
+            error: "INVALID_QUESTIONS_FORMAT",
+          } satisfies QuizActionResult,
+          { status: 400 },
+        );
+      }
+    } catch {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Invalid JSON format for questions. Please check your JSON syntax.",
+          error: "JSON_PARSE_ERROR",
+        } satisfies QuizActionResult,
+        { status: 400 },
+      );
+    }
 
     // 1) Create quiz
->>>>>>> 89457dbc8653ba8a2b2fe86eea3bb7bb12a88e3d
     const quizData = {
       quiz: {
         title: quizTitle,
         description: quizTitle,
         published: false,
-        allowed_attempts: 10
-      }
+        allowed_attempts: 10,
+      },
     };
 
     const quizResponse = await fetch(
-      `${canvasBaseUrl}/courses/${courseId}/quizzes`,
+      `${CANVAS_BASE_URL}/courses/${courseId}/quizzes`,
       {
         method: "POST",
         headers: {
           Authorization: `Bearer ${apiToken}`,
-<<<<<<< HEAD
           "Content-Type": "application/json",
         },
         body: JSON.stringify(quizData),
       },
-=======
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(quizData)
-      }
->>>>>>> 89457dbc8653ba8a2b2fe86eea3bb7bb12a88e3d
     );
 
     const quizText = await quizResponse.text();
+
     if (!quizResponse.ok) {
-<<<<<<< HEAD
-      const errorText = await quizResponse.text();
-      return {
-        success: false,
-        message: `Failed to create quiz. Status: ${quizResponse.status}. ${errorText}`,
-        error: "QUIZ_CREATION_FAILED",
-      };
-=======
       return NextResponse.json(
-        { ok: false, error: "Error creating quiz", details: quizText },
-        { status: quizResponse.status }
+        {
+          success: false,
+          message: `Failed to create quiz. Status: ${quizResponse.status}. ${quizText}`,
+          error: "QUIZ_CREATION_FAILED",
+        } satisfies QuizActionResult,
+        { status: quizResponse.status },
       );
->>>>>>> 89457dbc8653ba8a2b2fe86eea3bb7bb12a88e3d
     }
 
     const quizResult = JSON.parse(quizText);
-    const quizId = quizResult.id;
+    const quizId = quizResult?.id;
 
-<<<<<<< HEAD
-    // Paso 2: Agregar las preguntas al quiz creado usando fetch
-    let questionsAdded = 0;
-    for (const question of parsedQuestions) {
-=======
+    if (!quizId) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Quiz created but Canvas did not return a quiz id.",
+          error: "MISSING_QUIZ_ID",
+        } satisfies QuizActionResult,
+        { status: 500 },
+      );
+    }
+
     // 2) Add questions
-    const parsedQuestions = Array.isArray(questions) ? questions : questions; // expect array
+    let questionsAdded = 0;
+
     for (const q of parsedQuestions) {
->>>>>>> 89457dbc8653ba8a2b2fe86eea3bb7bb12a88e3d
       const questionResponse = await fetch(
-        `${canvasBaseUrl}/courses/${courseId}/quizzes/${quizId}/questions`,
+        `${CANVAS_BASE_URL}/courses/${courseId}/quizzes/${quizId}/questions`,
         {
           method: "POST",
           headers: {
             Authorization: `Bearer ${apiToken}`,
-<<<<<<< HEAD
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ question }),
+          body: JSON.stringify({ question: q }),
         },
-=======
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({ question: q })
-        }
->>>>>>> 89457dbc8653ba8a2b2fe86eea3bb7bb12a88e3d
       );
 
       const qText = await questionResponse.text();
+
       if (!questionResponse.ok) {
-<<<<<<< HEAD
-        const errorText = await questionResponse.text();
-        return {
-          success: false,
-          message: `Quiz created but failed to add question ${questionsAdded + 1}. Status: ${questionResponse.status}. ${errorText}`,
-          error: "QUESTION_ADDITION_FAILED",
-          quizId,
-        };
+        return NextResponse.json(
+          {
+            success: false,
+            message: `Quiz created but failed to add question ${
+              questionsAdded + 1
+            }. Status: ${questionResponse.status}. ${qText}`,
+            error: "QUESTION_ADDITION_FAILED",
+            quizId,
+          } satisfies QuizActionResult,
+          { status: questionResponse.status },
+        );
       }
 
       questionsAdded++;
-      console.log("Question added:", question.question_name);
     }
 
-    return {
-      success: true,
-      message: `Quiz created successfully with ${questionsAdded} question(s)!`,
-      quizId,
-    };
-  } catch (error) {
-    console.error("Error creating quiz:", error);
-    return {
-      success: false,
-      message: `An unexpected error occurred: ${error instanceof Error ? error.message : "Unknown error"}`,
-      error: "UNEXPECTED_ERROR",
-    };
-=======
-        return NextResponse.json(
-          {
-            ok: false,
-            error: "Error adding question",
-            question: q?.question_name,
-            details: qText
-          },
-          { status: questionResponse.status }
-        );
-      }
-    }
-
-    return NextResponse.json({ ok: true, quizId });
-  } catch (err: any) {
     return NextResponse.json(
-      { ok: false, error: err?.message ?? "Server error" },
-      { status: 500 }
+      {
+        success: true,
+        message: `Quiz created successfully with ${questionsAdded} question(s)!`,
+        quizId,
+      } satisfies QuizActionResult,
+      { status: 200 },
     );
->>>>>>> 89457dbc8653ba8a2b2fe86eea3bb7bb12a88e3d
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown server error";
+
+    return NextResponse.json(
+      {
+        success: false,
+        message: `An unexpected error occurred: ${message}`,
+        error: "UNEXPECTED_ERROR",
+      } satisfies QuizActionResult,
+      { status: 500 },
+    );
   }
 }
 
-// Optional: so GET doesn't confuse you during testing
 export async function GET() {
   return NextResponse.json({ ok: true, hint: "POST JSON to this endpoint" });
 }
