@@ -20,6 +20,7 @@ const CreateQuizForm = () => {
     setMessage(null);
 
     const formData = new FormData(e.currentTarget);
+    const form = e.currentTarget;
 
     try {
       const result = await createQuiz(formData);
@@ -27,7 +28,7 @@ const CreateQuizForm = () => {
       if (result.success) {
         setMessage({ type: "success", text: result.message });
         // Reset form on success
-        e.currentTarget.reset();
+        form.reset();
       } else {
         setMessage({ type: "error", text: result.message });
       }
