@@ -7,20 +7,38 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Textarea } from "./ui/textarea";
 
-const CreateQuizForm = () => {
+type CreateQuizFormProps = {
+  apiToken: string;
+  canvasBaseUrl: string;
+};
+
+const CreateQuizForm = ({ apiToken, canvasBaseUrl }: CreateQuizFormProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<{
     type: "success" | "error";
     text: string;
   } | null>(null);
 
+  const isConnectionReady = apiToken.trim().length > 0;
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+
+    if (!isConnectionReady) {
+      setMessage({
+        type: "error",
+        text: "Add your Canvas API token in the connection panel before creating a quiz.",
+      });
+      return;
+    }
+
     setIsLoading(true);
     setMessage(null);
 
     const formData = new FormData(e.currentTarget);
     const form = e.currentTarget;
+    formData.set("apiToken", apiToken);
+    formData.set("canvasBaseUrl", canvasBaseUrl);
 
     try {
       const result = await createQuiz(formData);
@@ -43,7 +61,7 @@ const CreateQuizForm = () => {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-5">
       {message && (
         <div
           className={`p-4 rounded-md border ${
@@ -60,17 +78,12 @@ const CreateQuizForm = () => {
         </div>
       )}
 
-      <div>
-        <Label htmlFor="apiToken">API Token</Label>
-        <Input
-          type="text"
-          id="apiToken"
-          name="apiToken"
-          className="mt-2"
-          required
-          disabled={isLoading}
-          placeholder="Enter your API Token"
-        />
+      <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 p-3 text-sm text-slate-600">
+        {isConnectionReady ? (
+          <p>Connection ready. This quiz will be created using the token from the top panel.</p>
+        ) : (
+          <p>Add a Canvas API token in the connection panel to enable quiz creation.</p>
+        )}
       </div>
 
       <div>
@@ -81,7 +94,7 @@ const CreateQuizForm = () => {
           name="courseId"
           className="mt-2"
           required
-          disabled={isLoading}
+          disabled={isLoading || !isConnectionReady}
           placeholder="Enter the Course ID"
         />
       </div>
@@ -94,7 +107,7 @@ const CreateQuizForm = () => {
           name="quizTitle"
           className="mt-2"
           required
-          disabled={isLoading}
+          disabled={isLoading || !isConnectionReady}
           placeholder="Enter the Quiz Title"
         />
       </div>
@@ -104,14 +117,17 @@ const CreateQuizForm = () => {
         <Textarea
           id="questions"
           name="questions"
-          className="mt-2"
+          className="mt-2 min-h-64 font-mono"
           required
-          disabled={isLoading}
-          placeholder='Enter the questions JSON (e.g. [{"question": "What is..."}])'
+          disabled={isLoading || !isConnectionReady}
+          placeholder='Enter the questions JSON (e.g. [{"question_name":"Question 1","question_text":"What is 2 + 2?","question_type":"multiple_choice_question","answers":[{"text":"4","weight":100},{"text":"5","weight":0}]}])'
         />
+        <p className="mt-2 text-xs text-slate-500">
+          The JSON should contain the question payloads expected by the Canvas quiz questions API.
+        </p>
       </div>
 
-      <Button type="submit" disabled={isLoading}>
+      <Button type="submit" disabled={isLoading || !isConnectionReady}>
         {isLoading ? (
           <>
             <svg
