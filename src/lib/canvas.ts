@@ -23,6 +23,50 @@ export type CanvasNewQuiz = Record<string, unknown> & {
   title?: string;
 };
 
+export type CanvasRubricRating = Record<string, unknown> & {
+  id: string;
+  description?: string;
+  long_description?: string;
+  points?: number;
+};
+
+export type CanvasRubricCriterion = Record<string, unknown> & {
+  id: string;
+  description?: string;
+  long_description?: string;
+  points?: number;
+  ratings?: CanvasRubricRating[];
+};
+
+export type CanvasAssignment = Record<string, unknown> & {
+  id: number;
+  name?: string;
+  points_possible?: number;
+  use_rubric_for_grading?: boolean;
+  rubric?: CanvasRubricCriterion[];
+  rubric_settings?: Record<string, unknown>;
+};
+
+export type RubricAssessmentCriterion = {
+  criterionId: string;
+  points?: string;
+  ratingId?: string;
+  comments?: string;
+};
+
+export type GradeRubricSubmissionInput = {
+  courseId: string;
+  assignmentId: string;
+  studentId: string;
+  postedGrade?: string;
+  comment?: string;
+  rubricAssessment: RubricAssessmentCriterion[];
+};
+
+export type GradeRubricSubmissionResult = {
+  submission: Record<string, unknown>;
+};
+
 export type CanvasQuizQuestion = Record<string, unknown> & {
   id: number;
   quiz_group_id?: number;
@@ -308,6 +352,72 @@ export async function listCanvasCourses(config: CanvasClientConfig) {
     "/api/v1/courses?per_page=100",
     config,
   );
+}
+
+export async function listCanvasAssignments(config: CanvasClientConfig, courseId: string) {
+  return requestPaginatedCanvasJson<CanvasAssignment>(
+    `/api/v1/courses/${courseId}/assignments?per_page=100`,
+    config,
+  );
+}
+
+export async function gradeCanvasSubmissionWithRubric(
+  config: CanvasClientConfig,
+  input: GradeRubricSubmissionInput,
+): Promise<GradeRubricSubmissionResult> {
+  const params = new URLSearchParams();
+  const postedGrade = input.postedGrade?.trim();
+  const comment = input.comment?.trim();
+
+  if (postedGrade) {
+    params.append("submission[posted_grade]", postedGrade);
+  }
+
+  if (comment) {
+    params.append("comment[text_comment]", comment);
+  }
+
+  for (const criterion of input.rubricAssessment) {
+    const criterionId = criterion.criterionId.trim();
+
+    if (!criterionId) {
+      continue;
+    }
+
+    const points = criterion.points?.trim();
+    const ratingId = criterion.ratingId?.trim();
+    const comments = criterion.comments?.trim();
+
+    if (points) {
+      params.append(`rubric_assessment[${criterionId}][points]`, points);
+    }
+
+    if (ratingId) {
+      params.append(`rubric_assessment[${criterionId}][rating_id]`, ratingId);
+    }
+
+    if (comments) {
+      params.append(`rubric_assessment[${criterionId}][comments]`, comments);
+    }
+  }
+
+  if (!params.toString()) {
+    throw new Error("At least one grade, comment, or rubric assessment value is required.");
+  }
+
+  const submission = await requestCanvasJson<Record<string, unknown>>(
+    `/api/v1/courses/${input.courseId}/assignments/${input.assignmentId}/submissions/${input.studentId}`,
+    config,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: params.toString(),
+    },
+  );
+
+  return { submission };
 }
 
 async function listClassicQuizzes(config: CanvasClientConfig, courseId: string) {

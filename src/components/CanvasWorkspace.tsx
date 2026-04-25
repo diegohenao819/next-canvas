@@ -6,6 +6,7 @@ import { DEFAULT_CANVAS_BASE_URL } from "@/lib/canvas";
 
 import CreateQuizForm from "./CreateQuizForm";
 import DownloadQuizPanel from "./DownloadQuizPanel";
+import GradeRubricPanel from "./GradeRubricPanel";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 
@@ -19,6 +20,11 @@ const tabs = [
     id: "download",
     label: "Download quiz",
     description: "Browse your Canvas courses and export existing quizzes as JSON.",
+  },
+  {
+    id: "grade",
+    label: "Grade rubric",
+    description: "Post rubric ratings, points, and feedback to a Canvas submission.",
   },
 ] as const;
 
@@ -108,8 +114,13 @@ export default function CanvasWorkspace() {
               canvasBaseUrl={canvasBaseUrl}
             />
           </section>
-        ) : (
+        ) : activeTab === "download" ? (
           <DownloadQuizPanel
+            apiToken={apiToken}
+            canvasBaseUrl={canvasBaseUrl}
+          />
+        ) : (
+          <GradeRubricPanel
             apiToken={apiToken}
             canvasBaseUrl={canvasBaseUrl}
           />
