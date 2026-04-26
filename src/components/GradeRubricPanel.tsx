@@ -5,9 +5,11 @@ import { useEffect, useMemo, useState } from "react";
 import type {
   CanvasAssignment,
   CanvasCourse,
+  CanvasRubricCriterion,
   CanvasRubricRating,
   RubricAssessmentCriterion,
 } from "@/lib/canvas";
+import { canvasStudentGroups } from "@/data/canvasStudents";
 
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -39,6 +41,23 @@ type CriterionDraft = {
   comments: string;
 };
 
+type RubricFeedbackCriterion = {
+  criterionId: string;
+  ratingId: string;
+  points: number;
+  comments: string;
+};
+
+type RubricFeedbackResponse = {
+  feedback: {
+    overallScore: number;
+    generalFeedback: string;
+    criteria: RubricFeedbackCriterion[];
+  };
+  model: string;
+  reasoningEffort: string;
+};
+
 class ApiRequestError extends Error {
   details?: string;
   target?: ApiError["target"];
@@ -60,7 +79,7 @@ function getErrorMessage(error: unknown, fallback: string) {
     const lines = [error.message];
 
     if (error.details?.trim()) {
-      lines.push(`Canvas details: ${error.details.trim()}`);
+      lines.push(`Details: ${error.details.trim()}`);
     }
 
     if (error.target?.path) {
@@ -71,6 +90,53 @@ function getErrorMessage(error: unknown, fallback: string) {
   }
 
   return error.message;
+}
+
+function formatScore(value: number) {
+  const rounded = Math.round((value + Number.EPSILON) * 100) / 100;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
+}
+
+function normalizeRatingText(value?: string) {
+  return value?.trim().toLocaleLowerCase() ?? "";
+}
+
+function findRatingByPoints(
+  ratings: CanvasRubricRating[] | undefined,
+  points: string | number | undefined,
+) {
+  const numericPoints =
+    typeof points === "number" ? points : Number(points?.trim());
+
+  if (!Number.isFinite(numericPoints)) {
+    return undefined;
+  }
+
+  return ratings?.find(
+    (rating) =>
+      typeof rating.points === "number" &&
+      Math.abs(rating.points - numericPoints) < 0.0001,
+  );
+}
+
+function resolveCriterionRatingId(
+  criterion: CanvasRubricCriterion,
+  ratingId: string | undefined,
+  points: string | number | undefined,
+) {
+  const ratings = criterion.ratings ?? [];
+  const normalizedRatingId = normalizeRatingText(ratingId);
+
+  const matchingRating =
+    ratings.find((rating) => rating.id === ratingId?.trim()) ??
+    ratings.find(
+      (rating) =>
+        normalizeRatingText(rating.description) === normalizedRatingId ||
+        normalizeRatingText(rating.long_description) === normalizedRatingId,
+    ) ??
+    findRatingByPoints(ratings, points);
+
+  return matchingRating?.id ?? "";
 }
 
 export default function GradeRubricPanel({
@@ -84,6 +150,7 @@ export default function GradeRubricPanel({
   const [studentId, setStudentId] = useState("");
   const [postedGrade, setPostedGrade] = useState("");
   const [generalComment, setGeneralComment] = useState("");
+  const [essayText, setEssayText] = useState("");
   const [criteriaDraft, setCriteriaDraft] = useState<Record<string, CriterionDraft>>({});
   const [message, setMessage] = useState<{
     type: "success" | "error";
@@ -91,6 +158,7 @@ export default function GradeRubricPanel({
   } | null>(null);
   const [isLoadingCourses, setIsLoadingCourses] = useState(false);
   const [isLoadingAssignments, setIsLoadingAssignments] = useState(false);
+  const [isGeneratingFeedback, setIsGeneratingFeedback] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isConnectionReady = apiToken.trim().length > 0;
@@ -103,6 +171,7 @@ export default function GradeRubricPanel({
     setStudentId("");
     setPostedGrade("");
     setGeneralComment("");
+    setEssayText("");
     setCriteriaDraft({});
     setMessage(null);
   }, [apiToken, canvasBaseUrl]);
@@ -115,6 +184,14 @@ export default function GradeRubricPanel({
   const rubricCriteria = useMemo(
     () => selectedAssignment?.rubric ?? [],
     [selectedAssignment],
+  );
+
+  const selectedStudent = useMemo(
+    () =>
+      canvasStudentGroups
+        .flatMap((group) => group.students)
+        .find((student) => student.id === studentId) ?? null,
+    [studentId],
   );
 
   const rubricTotal = useMemo(
@@ -202,6 +279,7 @@ export default function GradeRubricPanel({
     setSelectedAssignmentId("");
     setAssignments([]);
     setCriteriaDraft({});
+    setEssayText("");
     setMessage(null);
 
     if (!courseId) {
@@ -253,6 +331,8 @@ export default function GradeRubricPanel({
     setSelectedAssignmentId(assignmentId);
     setCriteriaDraft(nextDraft);
     setPostedGrade("");
+    setGeneralComment("");
+    setEssayText("");
     setMessage(null);
   }
 
@@ -285,6 +365,98 @@ export default function GradeRubricPanel({
     });
   }
 
+  function handleNewStudent() {
+    const nextDraft: Record<string, CriterionDraft> = {};
+
+    for (const criterion of rubricCriteria) {
+      nextDraft[criterion.id] = {
+        ratingId: "",
+        points: "",
+        comments: "",
+      };
+    }
+
+    setStudentId("");
+    setPostedGrade("");
+    setGeneralComment("");
+    setEssayText("");
+    setCriteriaDraft(nextDraft);
+    setMessage(null);
+  }
+
+  async function handleGenerateRubricFeedback() {
+    if (!selectedAssignment || rubricCriteria.length === 0) {
+      setMessage({
+        type: "error",
+        text: "Select an assignment with a rubric before generating feedback.",
+      });
+      return;
+    }
+
+    if (!essayText.trim()) {
+      setMessage({
+        type: "error",
+        text: "Paste the student's essay before generating feedback.",
+      });
+      return;
+    }
+
+    setIsGeneratingFeedback(true);
+    setMessage(null);
+
+    try {
+      const data = await postJson<RubricFeedbackResponse>(
+        "/api/openai/rubric-feedback",
+        {
+          essay: essayText,
+          assignmentName: selectedAssignment.name ?? "",
+          pointsPossible: selectedAssignment.points_possible,
+          rubricCriteria,
+        },
+      );
+
+      const nextDraft: Record<string, CriterionDraft> = {};
+
+      for (const criterion of rubricCriteria) {
+        const feedback = data.feedback.criteria.find(
+          (item) => item.criterionId === criterion.id,
+        );
+        const points =
+          typeof feedback?.points === "number"
+            ? formatScore(feedback.points)
+            : "";
+
+        nextDraft[criterion.id] = {
+          ratingId: resolveCriterionRatingId(
+            criterion,
+            feedback?.ratingId,
+            points,
+          ),
+          points,
+          comments: feedback?.comments ?? "",
+        };
+      }
+
+      setCriteriaDraft(nextDraft);
+      setPostedGrade(formatScore(data.feedback.overallScore));
+      setGeneralComment(data.feedback.generalFeedback);
+      setMessage({
+        type: "success",
+        text: `AI feedback drafted with ${data.model} (${data.reasoningEffort}). Review it before submitting to Canvas.`,
+      });
+    } catch (error) {
+      setMessage({
+        type: "error",
+        text: getErrorMessage(
+          error,
+          "Failed to generate rubric feedback with OpenAI.",
+        ),
+      });
+    } finally {
+      setIsGeneratingFeedback(false);
+    }
+  }
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -296,12 +468,20 @@ export default function GradeRubricPanel({
       return;
     }
 
-    const rubricAssessment: RubricAssessmentCriterion[] = rubricCriteria.map((criterion) => ({
-      criterionId: criterion.id,
-      points: criteriaDraft[criterion.id]?.points,
-      ratingId: criteriaDraft[criterion.id]?.ratingId,
-      comments: criteriaDraft[criterion.id]?.comments,
-    }));
+    const rubricAssessment: RubricAssessmentCriterion[] = rubricCriteria.map((criterion) => {
+      const draft = criteriaDraft[criterion.id];
+
+      return {
+        criterionId: criterion.id,
+        points: draft?.points,
+        ratingId: resolveCriterionRatingId(
+          criterion,
+          draft?.ratingId,
+          draft?.points,
+        ),
+        comments: draft?.comments,
+      };
+    });
     const gradeToPost =
       postedGrade.trim() || (hasRubricValues ? String(rubricTotal) : "");
 
@@ -433,20 +613,42 @@ export default function GradeRubricPanel({
             </div>
           </div>
 
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleNewStudent}
+              disabled={!selectedAssignment || isGeneratingFeedback || isSubmitting}
+            >
+              New Student
+            </Button>
+          </div>
+
           <div className="grid gap-5 md:grid-cols-3">
             <div>
-              <Label htmlFor="studentId">Student ID</Label>
-              <Input
+              <Label htmlFor="studentId">Student</Label>
+              <Select
                 id="studentId"
                 className="mt-2"
                 value={studentId}
                 onChange={(event) => setStudentId(event.target.value)}
                 disabled={!selectedAssignment || isSubmitting}
-                placeholder="Canvas user id"
-              />
+              >
+                <option value="">Select a student</option>
+                {canvasStudentGroups.map((group) => (
+                  <optgroup key={group.id} label={group.name}>
+                    {group.students.map((student) => (
+                      <option key={student.id} value={student.id}>
+                        {student.name} - {student.id}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </Select>
               <p className="mt-2 text-xs text-slate-500">
-                Use the Canvas user id for the student, not the submission id or
-                login email.
+                {selectedStudent
+                  ? `Canvas user id: ${selectedStudent.id}`
+                  : "Choose the student by name to avoid typing the Canvas id."}
               </p>
             </div>
             <div>
@@ -470,6 +672,38 @@ export default function GradeRubricPanel({
                   ? ` / ${selectedAssignment.points_possible}`
                   : ""}
               </p>
+            </div>
+          </div>
+
+          <div>
+            <Label htmlFor="studentEssay">Student essay</Label>
+            <Textarea
+              id="studentEssay"
+              className="mt-2 min-h-48"
+              value={essayText}
+              onChange={(event) => setEssayText(event.target.value)}
+              disabled={!selectedAssignment || isGeneratingFeedback || isSubmitting}
+              placeholder="Paste the student's essay here"
+            />
+            <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-slate-500">
+                Feedback will fill the rubric draft only. You still review and submit it manually.
+              </p>
+              <Button
+                type="button"
+                onClick={() => void handleGenerateRubricFeedback()}
+                disabled={
+                  !selectedAssignment ||
+                  rubricCriteria.length === 0 ||
+                  !essayText.trim() ||
+                  isGeneratingFeedback ||
+                  isSubmitting
+                }
+              >
+                {isGeneratingFeedback
+                  ? "Generating feedback..."
+                  : "Generate AI feedback"}
+              </Button>
             </div>
           </div>
 
