@@ -147,6 +147,9 @@ export default function GradeRubricPanel({
   const [assignments, setAssignments] = useState<CanvasAssignment[]>([]);
   const [selectedCourseId, setSelectedCourseId] = useState("");
   const [selectedAssignmentId, setSelectedAssignmentId] = useState("");
+  const [selectedStudentGroupId, setSelectedStudentGroupId] = useState(
+    canvasStudentGroups[0]?.id ?? "",
+  );
   const [studentId, setStudentId] = useState("");
   const [postedGrade, setPostedGrade] = useState("");
   const [generalComment, setGeneralComment] = useState("");
@@ -186,12 +189,19 @@ export default function GradeRubricPanel({
     [selectedAssignment],
   );
 
+  const selectedStudentGroup = useMemo(
+    () =>
+      canvasStudentGroups.find((group) => group.id === selectedStudentGroupId) ??
+      canvasStudentGroups[0] ??
+      null,
+    [selectedStudentGroupId],
+  );
+
   const selectedStudent = useMemo(
     () =>
-      canvasStudentGroups
-        .flatMap((group) => group.students)
-        .find((student) => student.id === studentId) ?? null,
-    [studentId],
+      selectedStudentGroup?.students.find((student) => student.id === studentId) ??
+      null,
+    [selectedStudentGroup, studentId],
   );
 
   const rubricTotal = useMemo(
@@ -363,6 +373,11 @@ export default function GradeRubricPanel({
       ratingId,
       ...(points !== undefined ? { points } : {}),
     });
+  }
+
+  function handleStudentGroupChange(groupId: string) {
+    setSelectedStudentGroupId(groupId);
+    setStudentId("");
   }
 
   function handleNewStudent() {
@@ -624,7 +639,24 @@ export default function GradeRubricPanel({
             </Button>
           </div>
 
-          <div className="grid gap-5 md:grid-cols-3">
+          <div className="grid gap-5 md:grid-cols-4">
+            <div>
+              <Label htmlFor="studentGroupId">Group</Label>
+              <Select
+                id="studentGroupId"
+                className="mt-2"
+                value={selectedStudentGroupId}
+                onChange={(event) => handleStudentGroupChange(event.target.value)}
+                disabled={!selectedAssignment || isSubmitting}
+              >
+                {canvasStudentGroups.map((group) => (
+                  <option key={group.id} value={group.id}>
+                    {group.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+
             <div>
               <Label htmlFor="studentId">Student</Label>
               <Select
@@ -635,14 +667,10 @@ export default function GradeRubricPanel({
                 disabled={!selectedAssignment || isSubmitting}
               >
                 <option value="">Select a student</option>
-                {canvasStudentGroups.map((group) => (
-                  <optgroup key={group.id} label={group.name}>
-                    {group.students.map((student) => (
-                      <option key={student.id} value={student.id}>
-                        {student.name} - {student.id}
-                      </option>
-                    ))}
-                  </optgroup>
+                {selectedStudentGroup?.students.map((student) => (
+                  <option key={student.id} value={student.id}>
+                    {student.name} - {student.id}
+                  </option>
                 ))}
               </Select>
               <p className="mt-2 text-xs text-slate-500">
