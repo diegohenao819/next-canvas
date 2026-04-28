@@ -7,6 +7,7 @@ import { NextResponse } from "next/server";
 import type { CanvasRubricCriterion } from "@/lib/canvas";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 type RubricFeedbackCriterion = {
   criterionId: string;
@@ -29,6 +30,7 @@ type RequestBody = {
 };
 
 const OPENAI_GRADING_MODEL = process.env.OPENAI_GRADING_MODEL || "gpt-5.5";
+const OPENAI_REQUEST_TIMEOUT_MS = 55_000;
 const GRADING_RULES_FILE = "rules for grading.md";
 
 let cachedGradingRules:
@@ -156,6 +158,28 @@ function roundScore(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
+function isAbortError(error: unknown) {
+  return error instanceof Error && error.name === "AbortError";
+}
+
+async function readJsonResponse(response: Response) {
+  const text = await response.text();
+
+  if (!text.trim()) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return {
+      error: {
+        message: text.slice(0, 500),
+      },
+    };
+  }
+}
+
 async function readGradingRules() {
   if (cachedGradingRules) {
     return cachedGradingRules;
@@ -256,12 +280,16 @@ export async function POST(req: Request) {
   };
 
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), OPENAI_REQUEST_TIMEOUT_MS);
+
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
+      signal: controller.signal,
       body: JSON.stringify({
         model: OPENAI_GRADING_MODEL,
         reasoning: { effort: "high" },
@@ -294,9 +322,9 @@ export async function POST(req: Request) {
           },
         },
       }),
-    });
+    }).finally(() => clearTimeout(timeout));
 
-    const data = (await response.json()) as unknown;
+    const data = await readJsonResponse(response);
 
     if (!response.ok) {
       const errorMessage =
@@ -344,6 +372,18 @@ export async function POST(req: Request) {
       },
     });
   } catch (error) {
+    if (isAbortError(error)) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "OpenAI took too long to generate rubric feedback. Try again, or use a shorter essay/rubric.",
+          error: "OPENAI_TIMEOUT",
+        },
+        { status: 504 },
+      );
+    }
+
     return NextResponse.json(
       {
         success: false,

@@ -92,6 +92,37 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error.message;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object";
+}
+
+function getStringProperty(value: Record<string, unknown>, key: string) {
+  const property = value[key];
+  return typeof property === "string" ? property : undefined;
+}
+
+function getApiTarget(value: Record<string, unknown>): ApiError["target"] {
+  const target = value.target;
+
+  if (!isRecord(target)) {
+    return undefined;
+  }
+
+  const parsedTarget = {
+    courseId: getStringProperty(target, "courseId"),
+    assignmentId: getStringProperty(target, "assignmentId"),
+    studentId: getStringProperty(target, "studentId"),
+    path: getStringProperty(target, "path"),
+  };
+
+  return Object.values(parsedTarget).some(Boolean) ? parsedTarget : undefined;
+}
+
+function getHttpErrorMessage(response: Response) {
+  const statusText = response.statusText ? ` ${response.statusText}` : "";
+  return `Request failed with ${response.status}${statusText}.`;
+}
+
 function formatScore(value: number) {
   const rounded = Math.round((value + Number.EPSILON) * 100) / 100;
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
@@ -227,18 +258,45 @@ export default function GradeRubricPanel({
       body: JSON.stringify(payload),
     });
 
-    const data = (await response.json()) as ApiSuccess<T> | ApiError;
+    const responseText = await response.text();
+    let data: unknown = null;
 
-    if (!response.ok || !data.success) {
-      const message =
-        "message" in data ? data.message : "Canvas request failed.";
-      const details = "details" in data ? data.details : undefined;
-      const target = "target" in data ? data.target : undefined;
-
-      throw new ApiRequestError(message, details, target);
+    if (responseText.trim()) {
+      try {
+        data = JSON.parse(responseText) as unknown;
+      } catch {
+        data = null;
+      }
     }
 
-    return data;
+    if (!response.ok) {
+      const apiError = isRecord(data) ? data : null;
+      const details =
+        apiError ? getStringProperty(apiError, "details") : undefined;
+      const fallbackDetails =
+        !details && responseText.trim()
+          ? responseText.trim().slice(0, 500)
+          : undefined;
+
+      throw new ApiRequestError(
+        apiError
+          ? getStringProperty(apiError, "message") ?? getHttpErrorMessage(response)
+          : getHttpErrorMessage(response),
+        details ?? fallbackDetails,
+        apiError ? getApiTarget(apiError) : undefined,
+      );
+    }
+
+    if (!isRecord(data) || data.success !== true) {
+      const message =
+        isRecord(data) && typeof data.message === "string"
+          ? data.message
+          : "The server returned an invalid response.";
+
+      throw new ApiRequestError(message);
+    }
+
+    return data as ApiSuccess<T>;
   }
 
   async function handleLoadCourses() {
