@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import type { CanvasCourse, CanvasQuizExport, CanvasQuizListItem } from "@/lib/canvas";
 
@@ -40,16 +40,6 @@ export default function DownloadQuizPanel({
   const [isLoadingExport, setIsLoadingExport] = useState(false);
 
   const isConnectionReady = apiToken.trim().length > 0;
-
-  useEffect(() => {
-    setCourses([]);
-    setQuizzes([]);
-    setSelectedCourseId("");
-    setSelectedQuizId("");
-    setQuizExport(null);
-    setWarnings([]);
-    setMessage(null);
-  }, [apiToken, canvasBaseUrl]);
 
   const selectedQuiz = useMemo(
     () => quizzes.find((quiz) => quiz.id === selectedQuizId) ?? null,

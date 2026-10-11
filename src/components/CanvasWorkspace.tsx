@@ -34,6 +34,8 @@ export default function CanvasWorkspace() {
   const [activeTab, setActiveTab] = useState<TabId>("create");
   const [apiToken, setApiToken] = useState("");
   const [canvasBaseUrl, setCanvasBaseUrl] = useState(DEFAULT_CANVAS_BASE_URL);
+  // Remount the panels when the connection changes so they start from a clean state.
+  const connectionKey = `${canvasBaseUrl}|${apiToken}`;
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,#e0f2fe,transparent_28%),linear-gradient(180deg,#f8fafc_0%,#eef2ff_55%,#f8fafc_100%)] px-4 py-8 text-slate-900">
@@ -116,11 +118,13 @@ export default function CanvasWorkspace() {
           </section>
         ) : activeTab === "download" ? (
           <DownloadQuizPanel
+            key={connectionKey}
             apiToken={apiToken}
             canvasBaseUrl={canvasBaseUrl}
           />
         ) : (
           <GradeRubricPanel
+            key={connectionKey}
             apiToken={apiToken}
             canvasBaseUrl={canvasBaseUrl}
           />
