@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import type {
   CanvasAssignment,
@@ -196,19 +196,6 @@ export default function GradeRubricPanel({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isConnectionReady = apiToken.trim().length > 0;
-
-  useEffect(() => {
-    setCourses([]);
-    setAssignments([]);
-    setSelectedCourseId("");
-    setSelectedAssignmentId("");
-    setStudentId("");
-    setPostedGrade("");
-    setGeneralComment("");
-    setEssayText("");
-    setCriteriaDraft({});
-    setMessage(null);
-  }, [apiToken, canvasBaseUrl]);
 
   const selectedAssignment = useMemo(
     () => assignments.find((assignment) => String(assignment.id) === selectedAssignmentId) ?? null,
